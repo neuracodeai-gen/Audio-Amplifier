@@ -5,22 +5,23 @@ async function getActiveTab() {
 
 function setToggleUI(enabled) {
   const btn = document.getElementById('toggleBtn');
-  if (enabled) {
-    btn.textContent = 'Turn Off';
-    btn.classList.add('on');
-    btn.classList.remove('off');
-  } else {
-    btn.textContent = 'Turn On';
-    btn.classList.remove('on');
-    btn.classList.add('off');
+  btn.textContent = enabled ? 'Turn Off' : 'Turn On';
+  btn.classList.toggle('on', enabled);
+  btn.classList.toggle('off', !enabled);
+}
+
+async function ensureContentScript(tabId) {
+  try {
+    await chrome.tabs.sendMessage(tabId, { type: 'PING' });
+  } catch {
+    await chrome.scripting.executeScript({ target: { tabId }, files: ['content.js'] });
   }
 }
 
 async function sendToTab(message) {
   const tab = await getActiveTab();
-  if (!tab?.id) {
-    throw new Error('No active tab found');
-  }
+  if (!tab?.id) throw new Error('No active tab found');
+  await ensureContentScript(tab.id);
   return chrome.tabs.sendMessage(tab.id, message);
 }
 
@@ -28,6 +29,7 @@ async function init() {
   const ampRange = document.getElementById('ampRange');
   const ampLabel = document.getElementById('ampLabel');
   const toggleBtn = document.getElementById('toggleBtn');
+  const reopenBtn = document.getElementById('reopenBtn');
   const status = document.getElementById('status');
 
   try {
@@ -36,7 +38,7 @@ async function init() {
     ampLabel.textContent = `${Number(ampRange.value).toFixed(1)}x`;
     setToggleUI(Boolean(state.enabled));
   } catch {
-    status.textContent = 'Open a page with media and try again.';
+    status.textContent = 'This page blocks scripting. Try opening it in a new tab.';
   }
 
   ampRange.addEventListener('input', async () => {
@@ -58,6 +60,13 @@ async function init() {
     } catch {
       status.textContent = 'Could not toggle on this tab.';
     }
+  });
+
+  reopenBtn.addEventListener('click', async () => {
+    const tab = await getActiveTab();
+    if (!tab?.url) return;
+    await chrome.tabs.create({ url: tab.url });
+    status.textContent = 'Opened current page in a new tab.';
   });
 }
 
